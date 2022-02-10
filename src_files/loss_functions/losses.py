@@ -24,7 +24,6 @@ class AsymmetricLoss(nn.Module):
         x_sigmoid = torch.sigmoid(x)
         xs_pos = x_sigmoid
         xs_neg = 1 - x_sigmoid
-
         # Asymmetric Clipping
         if self.clip is not None and self.clip > 0:
             xs_neg = (xs_neg + self.clip).clamp(max=1)

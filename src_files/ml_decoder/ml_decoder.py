@@ -20,9 +20,12 @@ def add_ml_decoder_head(model, num_classes=-1, num_of_groups=-1, decoder_embeddi
         del model.head
         model.head = MLDecoder(num_classes=num_classes, initial_num_features=num_features, num_of_groups=num_of_groups,
                                decoder_embedding=decoder_embedding, zsl=zsl)
+    elif hasattr(model, 'model'):
+        model.model.classifier = MLDecoder(num_classes=num_classes, initial_num_features=num_features, num_of_groups=num_of_groups,
+                               decoder_embedding=decoder_embedding, zsl=zsl)
     else:
-        print("model is not suited for ml-decoder")
-        exit(-1)
+        print("model is unavaible for now")
+        exit(1)
 
     return model
 

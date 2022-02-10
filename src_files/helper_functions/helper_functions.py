@@ -1,7 +1,7 @@
 import os
+import os.path as osp
 from copy import deepcopy
 import random
-import time
 from copy import deepcopy
 
 import numpy as np
@@ -101,6 +101,7 @@ class CocoDetection(datasets.coco.CocoDetection):
         self.ids = list(self.coco.imgToAnns.keys())
         self.transform = transform
         self.target_transform = target_transform
+        print(self.target_transform)
         self.cat2cat = dict()
         for cat in self.coco.cats.keys():
             self.cat2cat[cat] = len(self.cat2cat)
@@ -121,8 +122,7 @@ class CocoDetection(datasets.coco.CocoDetection):
             else:
                 output[2][self.cat2cat[obj['category_id']]] = 1
         target = output
-        target = target.max(dim=1)[0] # we dont use the small vs large information in multi-label detection
-
+        target = target.max(dim=0)[0] # we dont use the small vs large information in multi-label detection
         path = coco.loadImgs(img_id)[0]['file_name']
         img = Image.open(os.path.join(self.root, path)).convert('RGB')
         if self.transform is not None:
@@ -132,6 +132,62 @@ class CocoDetection(datasets.coco.CocoDetection):
             target = self.target_transform(target)
         return img, target
 
+class VOC_detection(data.Dataset):
+    def __init__(self, root, annot_path, transform=None):
+        super().__init__()
+        self.data_dir = root
+        self.annot = annot_path
+        self.transform = transform
+        self.data, classes = self.load_annotation(
+                self.annot,
+                self.data_dir,
+            )
+        self.num_train_ids = len(classes)
+
+    def __getitem__(self, index):
+        input_record = self.data[index]
+        path = input_record[0]
+
+        image = Image.open(path).convert('RGB')
+        obj_id = input_record[1]
+
+        targets = torch.zeros(self.num_train_ids)
+        for obj in obj_id:
+            targets[obj] = 1
+        obj_id = targets
+
+        if self.transform is not None:
+            transformed_image = self.transform(image)
+        else:
+            transformed_image = image
+
+        output_record = (transformed_image, obj_id)
+
+        return output_record
+
+    def __len__(self):
+        return len(self.data)
+
+    @staticmethod
+    def load_annotation(annot_path, data_dir):
+        out_data = []
+        with open(annot_path) as f:
+            annotation = json.load(f)
+            classes = sorted(annotation['classes'])
+            class_to_idx = {classes[i]: i for i in range(len(classes))}
+            images_info = annotation['images']
+            img_wo_objects = 0
+            for img_info in images_info:
+                rel_image_path, img_labels = img_info
+                full_image_path = osp.join(data_dir, rel_image_path)
+                labels_idx = [class_to_idx[lbl] for lbl in img_labels if lbl in class_to_idx]
+                assert full_image_path
+                if not labels_idx:
+                    img_wo_objects += 1
+                out_data.append((full_image_path, tuple(labels_idx)))
+        if img_wo_objects:
+            print(f'WARNING: there are {img_wo_objects} images without labels and will be treated as negatives')
+        return out_data, class_to_idx
 
 class ModelEma(torch.nn.Module):
     def __init__(self, model, decay=0.9997, device=None):
@@ -163,19 +219,20 @@ class CutoutPIL(object):
         self.cutout_factor = cutout_factor
 
     def __call__(self, x):
-        img_draw = ImageDraw.Draw(x)
-        h, w = x.size[0], x.size[1]  # HWC
-        h_cutout = int(self.cutout_factor * h + 0.5)
-        w_cutout = int(self.cutout_factor * w + 0.5)
-        y_c = np.random.randint(h)
-        x_c = np.random.randint(w)
+        if np.random.rand() <= 0.35:
+            img_draw = ImageDraw.Draw(x)
+            h, w = x.size[0], x.size[1]  # HWC
+            h_cutout = int(self.cutout_factor * h + 0.5)
+            w_cutout = int(self.cutout_factor * w + 0.5)
+            y_c = np.random.randint(h)
+            x_c = np.random.randint(w)
 
-        y1 = np.clip(y_c - h_cutout // 2, 0, h)
-        y2 = np.clip(y_c + h_cutout // 2, 0, h)
-        x1 = np.clip(x_c - w_cutout // 2, 0, w)
-        x2 = np.clip(x_c + w_cutout // 2, 0, w)
-        fill_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-        img_draw.rectangle([x1, y1, x2, y2], fill=fill_color)
+            y1 = np.clip(y_c - h_cutout // 2, 0, h)
+            y2 = np.clip(y_c + h_cutout // 2, 0, h)
+            x1 = np.clip(x_c - w_cutout // 2, 0, w)
+            x2 = np.clip(x_c + w_cutout // 2, 0, w)
+            fill_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            img_draw.rectangle([x1, y1, x2, y2], fill=fill_color)
 
         return x
 

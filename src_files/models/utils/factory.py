@@ -1,6 +1,7 @@
 import logging
 import os
 from urllib import request
+from src_files.models.timm_wrapper import TimmModelsWrapper
 
 import torch
 
@@ -24,6 +25,9 @@ def create_model(args,load_head=False):
         model = TResnetL(model_params)
     elif args.model_name == 'tresnet_xl':
         model = TResnetXL(model_params)
+    elif args.model_name == 'efficientnetv2':
+        model = TimmModelsWrapper('tf_efficientnetv2_s_in21k', args.num_classes,
+                                  pretrained=True, ml_decoder_used=True)
     else:
         print("model: {} not found !!".format(args.model_name))
         exit(-1)

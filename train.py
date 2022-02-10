@@ -8,7 +8,7 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 from torch.optim import lr_scheduler
 from src_files.helper_functions.helper_functions import mAP, CocoDetection, CutoutPIL, ModelEma, \
-    add_weight_decay
+    add_weight_decay, VOC_detection
 from src_files.models import create_model
 from src_files.loss_functions.losses import AsymmetricLoss
 from randaugment import RandAugment
@@ -19,13 +19,14 @@ parser.add_argument('--data', type=str, default='/home/MSCOCO_2014/')
 parser.add_argument('--lr', default=1e-4, type=float)
 parser.add_argument('--model-name', default='tresnet_l')
 parser.add_argument('--model-path', default='https://miil-public-eu.oss-eu-central-1.aliyuncs.com/model-zoo/ML_Decoder/tresnet_l_pretrain_ml_decoder.pth', type=str)
-parser.add_argument('--num-classes', default=80)
+parser.add_argument('--num-classes', default=80, type=int)
 parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
                     help='number of data loading workers')
 parser.add_argument('--image-size', default=448, type=int,
                     metavar='N', help='input image size (default: 448)')
 parser.add_argument('--batch-size', default=56, type=int,
                     metavar='N', help='mini-batch size')
+parser.add_argument('--data-set', default='coco', type=str)
 
 # ML-Decoder
 parser.add_argument('--use-ml-decoder', default=1, type=int)
@@ -46,31 +47,43 @@ def main():
 
     print('done')
 
+    train_transform = transforms.Compose([
+                        transforms.Resize((args.image_size, args.image_size)),
+                        transforms.ToTensor(),
+                        # normalize, # no need, toTensor does normalization
+                        ])
+    val_transform = transforms.Compose([
+                        transforms.Resize((args.image_size, args.image_size)),
+                        CutoutPIL(cutout_factor=0.5),
+                        RandAugment(),
+                        transforms.ToTensor(),
+                        # normalize,
+                        ])
     # COCO Data loading
-    instances_path_val = os.path.join(args.data, 'annotations/instances_val2014.json')
-    instances_path_train = os.path.join(args.data, 'annotations/instances_train2014.json')
-    instances_path_train=instances_path_val
-    # data_path_val = args.data
-    # data_path_train = args.data
-    data_path_val = f'{args.data}/val2014'  # args.data
-    data_path_train = f'{args.data}/train2014'  # args.data
-    data_path_train=data_path_val
-    val_dataset = CocoDetection(data_path_val,
-                                instances_path_val,
-                                transforms.Compose([
-                                    transforms.Resize((args.image_size, args.image_size)),
-                                    transforms.ToTensor(),
-                                    # normalize, # no need, toTensor does normalization
-                                ]))
-    train_dataset = CocoDetection(data_path_train,
-                                  instances_path_train,
-                                  transforms.Compose([
-                                      transforms.Resize((args.image_size, args.image_size)),
-                                      CutoutPIL(cutout_factor=0.5),
-                                      RandAugment(),
-                                      transforms.ToTensor(),
-                                      # normalize,
-                                  ]))
+    if args.data_set == 'coco':
+        instances_path_val = os.path.join(args.data, 'annotations/instances_val2014.json')
+        instances_path_train = os.path.join(args.data, 'annotations/instances_train2014.json')
+        # data_path_val = args.data
+        # data_path_train = args.data
+        data_path_val = f'{args.data}/val2014'  # args.data
+        data_path_train = f'{args.data}/train2014'  # args.data
+
+        val_dataset = CocoDetection(data_path_val,
+                                    instances_path_val,
+                                    val_transform)
+        train_dataset = CocoDetection(data_path_train,
+                                    instances_path_train,
+                                    train_transform)
+    else:
+        instances_path_train = os.path.join(args.data, 'train.json')
+        instances_path_val = os.path.join(args.data, 'val.json')
+        val_dataset = VOC_detection(args.data,
+                                    instances_path_val,
+                                    val_transform)
+        train_dataset = VOC_detection(args.data,
+                                    instances_path_train,
+                                    train_transform)
+
     print("len(val_dataset)): ", len(val_dataset))
     print("len(train_dataset)): ", len(train_dataset))
 
@@ -103,6 +116,8 @@ def train_multi_label_coco(model, train_loader, val_loader, lr):
     highest_mAP = 0
     trainInfoList = []
     scaler = GradScaler()
+    # validate before training
+    validate_multi(val_loader, model, ema)
     for epoch in range(Epochs):
         for i, (inputData, target) in enumerate(train_loader):
             inputData = inputData.cuda()
@@ -123,7 +138,7 @@ def train_multi_label_coco(model, train_loader, val_loader, lr):
 
             ema.update(model)
             # store information
-            if i % 100 == 0:
+            if i % 100 == 0 or (i == (len(train_loader) - 1)):
                 trainInfoList.append([epoch, i, loss.item()])
                 print('Epoch [{}/{}], Step [{}/{}], LR {:.1e}, Loss: {:.1f}'
                       .format(epoch, Epochs, str(i).zfill(3), str(steps_per_epoch).zfill(3),
@@ -157,8 +172,6 @@ def validate_multi(val_loader, model, ema_model):
     preds_ema = []
     targets = []
     for i, (input, target) in enumerate(val_loader):
-        target = target
-        target = target.max(dim=1)[0]
         # compute output
         with torch.no_grad():
             with autocast():
