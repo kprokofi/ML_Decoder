@@ -47,12 +47,12 @@ def main():
 
     print('done')
 
-    train_transform = transforms.Compose([
+    val_transform = transforms.Compose([
                         transforms.Resize((args.image_size, args.image_size)),
                         transforms.ToTensor(),
                         # normalize, # no need, toTensor does normalization
                         ])
-    val_transform = transforms.Compose([
+    train_transform = transforms.Compose([
                         transforms.Resize((args.image_size, args.image_size)),
                         CutoutPIL(cutout_factor=0.5),
                         RandAugment(),
