@@ -7,8 +7,8 @@ import torch.optim
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
 from torch.optim import lr_scheduler
-from src_files.helper_functions.helper_functions import mAP, CocoDetection, CutoutPIL, ModelEma, \
-    add_weight_decay, VOC_detection
+from src_files.helper_functions.helper_functions import mAP, CutoutPIL, ModelEma, \
+    add_weight_decay, OTE_detection
 from src_files.models import create_model
 from src_files.loss_functions.losses import AsymmetricLoss
 from randaugment import RandAugment
@@ -27,6 +27,7 @@ parser.add_argument('--image-size', default=448, type=int,
 parser.add_argument('--batch-size', default=56, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('--data-set', default='coco', type=str)
+parser.add_argument('--device-ids', default=[0], type=list)
 
 # ML-Decoder
 parser.add_argument('--use-ml-decoder', default=1, type=int)
@@ -40,6 +41,8 @@ def main():
     # Setup model
     print('creating model {}...'.format(args.model_name))
     model = create_model(args).cuda()
+    if len(args.device_ids) > 1:
+        model = torch.nn.DataParallel(model, device_ids=args.device_ids, output_device=0)
 
     # local_rank = torch.distributed.get_rank()
     # torch.cuda.set_device(0)
@@ -59,30 +62,15 @@ def main():
                         transforms.ToTensor(),
                         # normalize,
                         ])
-    # COCO Data loading
-    if args.data_set == 'coco':
-        instances_path_val = os.path.join(args.data, 'annotations/instances_val2014.json')
-        instances_path_train = os.path.join(args.data, 'annotations/instances_train2014.json')
-        # data_path_val = args.data
-        # data_path_train = args.data
-        data_path_val = f'{args.data}/val2014'  # args.data
-        data_path_train = f'{args.data}/train2014'  # args.data
-
-        val_dataset = CocoDetection(data_path_val,
-                                    instances_path_val,
-                                    val_transform)
-        train_dataset = CocoDetection(data_path_train,
-                                    instances_path_train,
-                                    train_transform)
-    else:
-        instances_path_train = os.path.join(args.data, 'train.json')
-        instances_path_val = os.path.join(args.data, 'val.json')
-        val_dataset = VOC_detection(args.data,
-                                    instances_path_val,
-                                    val_transform)
-        train_dataset = VOC_detection(args.data,
-                                    instances_path_train,
-                                    train_transform)
+    # Data loading
+    instances_path_train = os.path.join(args.data, 'train.json')
+    instances_path_val = os.path.join(args.data, 'val.json')
+    val_dataset = OTE_detection(args.data,
+                                instances_path_val,
+                                val_transform)
+    train_dataset = OTE_detection(args.data,
+                                instances_path_train,
+                                train_transform)
 
     print("len(val_dataset)): ", len(val_dataset))
     print("len(train_dataset)): ", len(train_dataset))

@@ -132,7 +132,7 @@ class CocoDetection(datasets.coco.CocoDetection):
             target = self.target_transform(target)
         return img, target
 
-class VOC_detection(data.Dataset):
+class OTE_detection(data.Dataset):
     def __init__(self, root, annot_path, transform=None):
         super().__init__()
         self.data_dir = root
