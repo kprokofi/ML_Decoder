@@ -27,7 +27,7 @@ parser.add_argument('--image-size', default=448, type=int,
 parser.add_argument('--batch-size', default=56, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('--data-set', default='coco', type=str)
-parser.add_argument('--device-ids', default=[0], type=list)
+parser.add_argument('--gpus', default=1, type=int)
 
 # ML-Decoder
 parser.add_argument('--use-ml-decoder', default=1, type=int)
@@ -41,8 +41,10 @@ def main():
     # Setup model
     print('creating model {}...'.format(args.model_name))
     model = create_model(args).cuda()
-    if len(args.device_ids) > 1:
-        model = torch.nn.DataParallel(model, device_ids=args.device_ids, output_device=0)
+    if args.gpus > 1:
+        device_ids = [i for i in range(args.gpus)]
+        model = torch.nn.DataParallel(model, device_ids=device_ids, output_device=0)
+        print("Data Parallel enabled")
 
     # local_rank = torch.distributed.get_rank()
     # torch.cuda.set_device(0)
@@ -105,7 +107,6 @@ def train_multi_label_coco(model, train_loader, val_loader, lr):
     trainInfoList = []
     scaler = GradScaler()
     # validate before training
-    validate_multi(val_loader, model, ema)
     for epoch in range(Epochs):
         for i, (inputData, target) in enumerate(train_loader):
             inputData = inputData.cuda()
