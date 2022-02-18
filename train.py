@@ -28,6 +28,7 @@ parser.add_argument('--batch-size', default=56, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('--data-set', default='coco', type=str)
 parser.add_argument('--gpus', default=1, type=int)
+parser.add_argument('--output-dir', default="./", type=str)
 
 # ML-Decoder
 parser.add_argument('--use-ml-decoder', default=1, type=int)
@@ -86,11 +87,14 @@ def main():
         val_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=False)
 
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+
     # Actuall Training
-    train_multi_label_coco(model, train_loader, val_loader, args.lr)
+    train_multi_label_coco(model, train_loader, val_loader, args.lr, args.output_dir)
 
 
-def train_multi_label_coco(model, train_loader, val_loader, lr):
+def train_multi_label_coco(model, train_loader, val_loader, lr, output_dir):
     ema = ModelEma(model, 0.9997)  # 0.9997^641=0.82
 
     # set optimizer
@@ -134,11 +138,10 @@ def train_multi_label_coco(model, train_loader, val_loader, lr):
                               scheduler.get_last_lr()[0], \
                               loss.item()))
 
-        try:
-            torch.save(model.state_dict(), os.path.join(
-                'models/', 'model-{}-{}.ckpt'.format(epoch + 1, i + 1)))
-        except:
-            pass
+        ema_state_dict = ema.module.state_dict()
+        model_state_dict = model.state_dict()
+        save_model(model_state_dict, epoch, optimizer, scheduler, output_dir, 'main')
+        save_model(ema_state_dict, epoch, optimizer, scheduler, output_dir, 'ema')
 
         model.eval()
 
@@ -148,7 +151,7 @@ def train_multi_label_coco(model, train_loader, val_loader, lr):
             highest_mAP = mAP_score
             try:
                 torch.save(model.state_dict(), os.path.join(
-                    'models/', 'model-highest.ckpt'))
+                    'models/', 'model-highest.pth'))
             except:
                 pass
         print('current_mAP = {:.2f}, highest_mAP = {:.2f}\n'.format(mAP_score, highest_mAP))
@@ -160,7 +163,7 @@ def validate_multi(val_loader, model, ema_model):
     preds_regular = []
     preds_ema = []
     targets = []
-    for i, (input, target) in enumerate(val_loader):
+    for _, (input, target) in enumerate(val_loader):
         # compute output
         with torch.no_grad():
             with autocast():
@@ -177,6 +180,16 @@ def validate_multi(val_loader, model, ema_model):
     print("mAP score regular {:.2f}, mAP score EMA {:.2f}".format(mAP_score_regular, mAP_score_ema))
     return max(mAP_score_regular, mAP_score_ema)
 
+def save_model(state_dict, epoch, optimizer, scheduler, output_dir, name):
+    checkpoint = {
+            'state_dict': state_dict,
+            'epoch': epoch + 1,
+            'optimizer': optimizer.state_dict(),
+            'scheduler': scheduler.state_dict(),
+        }
+
+    torch.save(checkpoint, os.path.join(
+            output_dir, 'model-{}-{}.ckpt'.format(name, epoch + 1)))
 
 if __name__ == '__main__':
     main()
