@@ -3,7 +3,7 @@ import os.path as osp
 import argparse
 import sys
 import errno
-import datetime
+from datetime import datetime
 import time
 
 import torch
