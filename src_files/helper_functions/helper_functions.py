@@ -6,10 +6,9 @@ from copy import deepcopy
 
 import numpy as np
 from PIL import Image
-from torchvision import datasets as datasets
+from torchvision import datasets
 import torch
 from PIL import ImageDraw
-from pycocotools.coco import COCO
 import json
 import torch.utils.data as data
 from sklearn.preprocessing import MultiLabelBinarizer
