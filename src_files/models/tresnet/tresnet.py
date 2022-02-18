@@ -7,7 +7,6 @@ from .layers.anti_aliasing import AntiAliasDownsampleLayer
 from .layers.avg_pool import FastAvgPool2d
 from src_files.ml_decoder.ml_decoder import MLDecoder
 from .layers.general_layers import SEModule, SpaceToDepthModule
-from inplace_abn import InPlaceABN, ABN
 
 
 def InplacABN_to_ABN(module: nn.Module) -> nn.Module:
@@ -208,6 +207,7 @@ class TResNet(Module):
 
 
 def TResnetS(model_params):
+    from inplace_abn import InPlaceABN, ABN
     """Constructs a small TResnet model.
     """
     in_chans = 3
@@ -217,6 +217,7 @@ def TResnetS(model_params):
     return model
 
 def TResnetM(model_params):
+    from inplace_abn import InPlaceABN, ABN
     """Constructs a medium TResnet model.
     """
     in_chans = 3
@@ -226,6 +227,7 @@ def TResnetM(model_params):
 
 
 def TResnetL(model_params):
+    from inplace_abn import InPlaceABN, ABN
     """Constructs a large TResnet model.
     """
     in_chans = 3
@@ -235,6 +237,7 @@ def TResnetL(model_params):
     return model
 
 def TResnetXL(model_params):
+    from inplace_abn import InPlaceABN, ABN
     """Constructs a large TResnet model.
     """
     in_chans = 3
